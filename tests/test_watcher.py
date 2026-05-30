@@ -33,7 +33,7 @@ def test_poll_all_feeds(temp_db, mocker):
         "title": "Verge",
         "subtitle": "Verge description",
         "link": "https://theverge.com",
-        "image": {"href": "https://theverge.com/logo.png"}
+        "image": {"href": "https://theverge.com/logo.png"},
     }
     mock_parsed.entries = [
         {
@@ -41,7 +41,7 @@ def test_poll_all_feeds(temp_db, mocker):
             "summary": "AI is advancing rapidly in 2026.",
             "published": "2026-05-30T00:00:00",
             "link": "https://theverge.com/ai-2026",
-            "author": "TechReporter"
+            "author": "TechReporter",
         }
     ]
 
@@ -49,9 +49,9 @@ def test_poll_all_feeds(temp_db, mocker):
 
     # Trigger poll
     new_entries_count = poll_all_feeds(temp_db)
-    
+
     assert new_entries_count == 1
-    
+
     # Check that database has the entry logged
     entries = list(temp_db["rss_feed_entries"].rows)
     assert len(entries) == 1

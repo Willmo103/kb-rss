@@ -6,7 +6,7 @@ from kb_rss.db import (
     save_or_update_feed,
     link_feed_to_category,
     save_new_feed_entry,
-    update_entry_interaction
+    update_entry_interaction,
 )
 from kb_rss.models import RssFeed, FeedItemEntry
 
@@ -44,7 +44,7 @@ def test_get_or_create_category(temp_db):
 
     assert cat_id1 == cat_id2
     assert cat_id1 != cat_id3
-    
+
     rows = list(temp_db["rss_categories"].rows)
     assert len(rows) == 2
 
@@ -58,16 +58,16 @@ def test_save_or_update_feed(temp_db):
         subtitle="Description of feed",
         link="https://example.com",
     )
-    
+
     feed_url = "https://example.com/feed.xml"
     feed_id1 = save_or_update_feed(temp_db, feed_url, feed)
-    
+
     # Update title
     feed.title = "Updated Feed"
     feed_id2 = save_or_update_feed(temp_db, feed_url, feed)
 
     assert feed_id1 == feed_id2
-    
+
     rows = list(temp_db["rss_feeds"].rows)
     assert len(rows) == 1
     assert rows[0]["title"] == "Updated Feed"
@@ -91,7 +91,7 @@ def test_save_new_feed_entry(temp_db):
         summary="Post Summary",
         published="2026-05-30",
         link="https://example.com/post1",
-        author="Will"
+        author="Will",
     )
 
     entry_id, status = save_new_feed_entry(temp_db, entry)
@@ -123,13 +123,21 @@ def test_update_entry_interaction(temp_db):
         summary="Post Summary",
         published="2026-05-30",
         link="https://example.com/post1",
-        author="Will"
+        author="Will",
     )
     entry_id, _ = save_new_feed_entry(temp_db, entry)
 
     # Perform interactions
-    update_entry_interaction(temp_db, entry_id, liked=1, favorite=1, comment="Awesome!", clicked=True, shared=True)
-    
+    update_entry_interaction(
+        temp_db,
+        entry_id,
+        liked=1,
+        favorite=1,
+        comment="Awesome!",
+        clicked=True,
+        shared=True,
+    )
+
     rows = list(temp_db["rss_feed_entries"].rows)
     assert len(rows) == 1
     assert rows[0]["liked"] == 1

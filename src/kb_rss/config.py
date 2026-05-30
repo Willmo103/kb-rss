@@ -17,6 +17,7 @@ class Config(CoreConfig):
     Extends the core kb-core Config to support RSS-specific settings
     loaded from ~/.kb/configs/kb-rss.json.
     """
+
     settings_file: Path = CoreConfig.configs_dir / "kb-rss.json"
 
     def __init__(self) -> None:
@@ -38,7 +39,9 @@ class Config(CoreConfig):
                     file_data = json.load(f)
                     return {**defaults, **file_data}
             except Exception as e:
-                print(f"Warning: Failed to load settings file {self.settings_file}: {e}")
+                print(
+                    f"Warning: Failed to load settings file {self.settings_file}: {e}"
+                )
         return defaults
 
     def save_settings(self, settings: Dict[str, Any]) -> None:

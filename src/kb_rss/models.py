@@ -12,6 +12,7 @@ class RssSource(BaseModel):
     """
     Represents an RSS feed source parsed from JSON or dynamic UI config.
     """
+
     title: str
     url: str
     description: Optional[str] = ""
@@ -28,6 +29,7 @@ class RssCategory(BaseModel):
     """
     Represents a category containing multiple RSS sources.
     """
+
     name: str
     rss_sources: List[RssSource] = Field(default_factory=list)
 
@@ -36,6 +38,7 @@ class RssFeed(BaseModel):
     """
     Represents the metadata of a parsed RSS Feed in the database.
     """
+
     title: str
     subtitle: Optional[str] = None
     link: str
@@ -49,6 +52,7 @@ class FeedItemEntry(BaseModel):
     """
     Represents an individual post/entry from an RSS feed.
     """
+
     feed_id: int
     title: str
     summary: str

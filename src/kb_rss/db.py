@@ -24,7 +24,7 @@ def extract_image_url(e: Any) -> Optional[str]:
     for enc in enclosures:
         if enc.get("type", "").startswith("image/"):
             return enc.get("href")
-            
+
     # 2. Check media content
     media_content = e.get("media_content", [])
     for media in media_content:
@@ -54,7 +54,7 @@ def extract_image_url(e: Any) -> Optional[str]:
             match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
             if match:
                 return match.group(1)
-                
+
     return None
 
 
@@ -76,25 +76,48 @@ def scrape_full_article_content(url: str) -> Tuple[str, Optional[str]]:
         response.raise_for_status()
         html = response.text
     except Exception as e:
-        return f"<p class='text-retro-red font-semibold'>Failed to retrieve article content: {e}</p>", None
+        return (
+            f"<p class='text-retro-red font-semibold'>Failed to retrieve article content: {e}</p>",
+            None,
+        )
 
     try:
         soup = BeautifulSoup(html, "html.parser")
 
         # Try to find a primary image from og:image or twitter:image
         image_url = None
-        og_image = soup.find("meta", property="og:image") or soup.find("meta", attrs={"name": "twitter:image"})
+        og_image = soup.find("meta", property="og:image") or soup.find(
+            "meta", attrs={"name": "twitter:image"}
+        )
         if og_image and og_image.get("content"):
             image_url = og_image.get("content")
 
         # Clean script, style, nav, footer, header tags
-        for tag in soup(["script", "style", "nav", "footer", "header", "form", "iframe", "aside", "noscript"]):
+        for tag in soup(
+            [
+                "script",
+                "style",
+                "nav",
+                "footer",
+                "header",
+                "form",
+                "iframe",
+                "aside",
+                "noscript",
+            ]
+        ):
             tag.decompose()
 
         # Try to find main content container
         main_content = soup.find("article") or soup.find("main")
         if not main_content:
-            for css_class in ["post-content", "article-content", "entry-content", "content", "main-content-inner"]:
+            for css_class in [
+                "post-content",
+                "article-content",
+                "entry-content",
+                "content",
+                "main-content-inner",
+            ]:
                 container = soup.find(class_=re.compile(css_class, re.I))
                 if container:
                     main_content = container
@@ -105,10 +128,26 @@ def scrape_full_article_content(url: str) -> Tuple[str, Optional[str]]:
 
         # Reconstruct clean list of elements
         content_elements = []
-        for el in main_content.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "pre", "ul", "ol", "code", "img"]):
+        for el in main_content.find_all(
+            [
+                "h1",
+                "h2",
+                "h3",
+                "h4",
+                "h5",
+                "h6",
+                "p",
+                "blockquote",
+                "pre",
+                "ul",
+                "ol",
+                "code",
+                "img",
+            ]
+        ):
             if any(parent in el.parents for parent in content_elements):
                 continue
-            
+
             if el.name == "img":
                 src = el.get("src")
                 if src:
@@ -122,12 +161,18 @@ def scrape_full_article_content(url: str) -> Tuple[str, Optional[str]]:
             content_elements.append(el)
 
         if not content_elements:
-            return "<p class='opacity-70 italic'>Could not extract clean text content from this page.</p>", image_url
+            return (
+                "<p class='opacity-70 italic'>Could not extract clean text content from this page.</p>",
+                image_url,
+            )
 
         cleaned_html = "".join(str(el) for el in content_elements)
         return cleaned_html, image_url
     except Exception as e:
-        return f"<p class='text-retro-red font-semibold'>Error parsing article: {e}</p>", None
+        return (
+            f"<p class='text-retro-red font-semibold'>Error parsing article: {e}</p>",
+            None,
+        )
 
 
 def init_db(db: sqlite_utils.Database) -> None:
@@ -289,7 +334,9 @@ def save_or_update_feed(
         return int(record.last_pk)
 
 
-def link_feed_to_category(db: sqlite_utils.Database, feed_id: int, category_id: int) -> None:
+def link_feed_to_category(
+    db: sqlite_utils.Database, feed_id: int, category_id: int
+) -> None:
     """
     Map a feed to a category if not already linked.
 
@@ -306,7 +353,9 @@ def link_feed_to_category(db: sqlite_utils.Database, feed_id: int, category_id: 
         table.insert({"feed_id": feed_id, "category_id": category_id})
 
 
-def save_new_feed_entry(db: sqlite_utils.Database, entry: FeedItemEntry) -> Tuple[int, str]:
+def save_new_feed_entry(
+    db: sqlite_utils.Database, entry: FeedItemEntry
+) -> Tuple[int, str]:
     """
     Save a new entry to the database. Prevents duplication by checking uniqueness of link.
 
@@ -357,7 +406,9 @@ def add_feed_by_url(
     init_db(db)
     parsed = feedparser.parse(feed_url)
     if parsed.bozo:
-        raise ValueError(f"Failed to parse RSS feed from URL '{feed_url}': {parsed.bozo_exception}")
+        raise ValueError(
+            f"Failed to parse RSS feed from URL '{feed_url}': {parsed.bozo_exception}"
+        )
 
     # Extract Feed Details
     f = parsed.feed

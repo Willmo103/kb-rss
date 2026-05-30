@@ -3,7 +3,12 @@ import pytest
 import sqlite_utils
 from unittest.mock import MagicMock
 from kb_rss.agent import update_taste_profile, generate_daily_suggestions, get_paths
-from kb_rss.db import init_db, save_or_update_feed, save_new_feed_entry, update_entry_interaction
+from kb_rss.db import (
+    init_db,
+    save_or_update_feed,
+    save_new_feed_entry,
+    update_entry_interaction,
+)
 from kb_rss.models import RssFeed, FeedItemEntry
 from kb_rss.config import Config
 
@@ -28,7 +33,13 @@ def test_update_taste_profile(temp_db, mocker, tmp_path):
     # Seed interactions
     feed = RssFeed(title="Test", link="http://example.com")
     feed_id = save_or_update_feed(temp_db, "http://example.com/rss", feed)
-    entry = FeedItemEntry(feed_id=feed_id, title="Open Source", summary="Python is open source.", published="2026", link="http://example.com/p1")
+    entry = FeedItemEntry(
+        feed_id=feed_id,
+        title="Open Source",
+        summary="Python is open source.",
+        published="2026",
+        link="http://example.com/p1",
+    )
     entry_id, _ = save_new_feed_entry(temp_db, entry)
     update_entry_interaction(temp_db, entry_id, liked=1, comment="Love it!")
 
@@ -42,7 +53,7 @@ def test_update_taste_profile(temp_db, mocker, tmp_path):
 
     # Run
     new_profile = update_taste_profile(temp_db)
-    
+
     assert "Python & Open Source" in new_profile
     user_interests_path, agent_tastes_path = get_paths(config)
     assert agent_tastes_path.exists()
@@ -60,10 +71,22 @@ def test_generate_daily_suggestions(temp_db, mocker, tmp_path):
     # Seed articles
     feed = RssFeed(title="Verge", link="http://verge.com")
     feed_id = save_or_update_feed(temp_db, "http://verge.com/rss", feed)
-    
-    entry1 = FeedItemEntry(feed_id=feed_id, title="Gemma 2", summary="Gemma 2 released.", published="2026", link="http://verge.com/p1")
-    entry2 = FeedItemEntry(feed_id=feed_id, title="NASA Mars", summary="Mars expedition details.", published="2026", link="http://verge.com/p2")
-    
+
+    entry1 = FeedItemEntry(
+        feed_id=feed_id,
+        title="Gemma 2",
+        summary="Gemma 2 released.",
+        published="2026",
+        link="http://verge.com/p1",
+    )
+    entry2 = FeedItemEntry(
+        feed_id=feed_id,
+        title="NASA Mars",
+        summary="Mars expedition details.",
+        published="2026",
+        link="http://verge.com/p2",
+    )
+
     id1, _ = save_new_feed_entry(temp_db, entry1)
     id2, _ = save_new_feed_entry(temp_db, entry2)
 
@@ -71,10 +94,8 @@ def test_generate_daily_suggestions(temp_db, mocker, tmp_path):
     mock_response = MagicMock()
     mock_response.status_code = 200
     curation_payload = {
-        "selections": [
-            {"id": id1, "reason": "Interested in AI models."}
-        ],
-        "summary_report": "# Today's curation summary\nMajor topics: AI model progress."
+        "selections": [{"id": id1, "reason": "Interested in AI models."}],
+        "summary_report": "# Today's curation summary\nMajor topics: AI model progress.",
     }
     mock_response.json.return_value = {
         "message": {"content": json.dumps(curation_payload)}
@@ -86,9 +107,9 @@ def test_generate_daily_suggestions(temp_db, mocker, tmp_path):
 
     # Run curation
     report = generate_daily_suggestions(temp_db)
-    
+
     assert "Today's curation summary" in report
-    
+
     # Check that database matches selection
     entries = list(temp_db["rss_feed_entries"].rows)
     # Entry 1 was suggested

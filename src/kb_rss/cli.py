@@ -48,8 +48,11 @@ def is_pid_running(pid: int) -> bool:
         return False
     if sys.platform == "win32":
         import ctypes
+
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
         if handle == 0:
             return False
         ctypes.windll.kernel32.CloseHandle(handle)
@@ -168,6 +171,7 @@ def stop():
             # Wait briefly and verify shutdown
             for _ in range(10):
                 import time
+
                 if not is_pid_running(pid):
                     break
                 time.sleep(0.1)
@@ -185,7 +189,9 @@ def stop():
 
             typer.echo("RSS watcher stopped.")
         else:
-            typer.echo(f"Watcher process {pid} is not running. Cleaning up stale PID file.")
+            typer.echo(
+                f"Watcher process {pid} is not running. Cleaning up stale PID file."
+            )
     except ValueError:
         typer.echo("Stale PID file detected. Cleaning up.")
     except Exception as e:
@@ -422,9 +428,7 @@ def category_list():
 
 
 @kb_rss_cli.command("import-json")
-def import_json(
-    path: str = typer.Argument(..., help="Path to feed json file.")
-):
+def import_json(path: str = typer.Argument(..., help="Path to feed json file.")):
     """
     Seed feeds and categories into the database from an external JSON file.
     """
@@ -463,37 +467,40 @@ def import_json(
 
 @kb_rss_cli.command("fetch-full")
 def fetch_full(
-    entry_id: int = typer.Argument(..., help="The database ID of the RSS entry to scrape.")
+    entry_id: int = typer.Argument(
+        ..., help="The database ID of the RSS entry to scrape."
+    )
 ):
     """
     Fetch the web page for the entry, scrape its full text and images, and cache it.
     """
     from .db import scrape_full_article_content
+
     db = config.get_db()
     init_db(db)
-    
+
     table = db["rss_feed_entries"]
     existing = list(table.rows_where("id = ?", [entry_id]))
     if not existing:
         typer.echo(f"Error: RSS entry with ID {entry_id} not found.")
         raise typer.Exit(code=1)
-        
+
     entry = existing[0]
     link = entry.get("link")
     if not link:
         typer.echo("Error: Entry has no link URL.")
         raise typer.Exit(code=1)
-        
+
     typer.echo(f"Fetching and scraping: {link}...")
     try:
         full_html, image_url = scrape_full_article_content(link)
         updates = {"full_content": full_html}
-        
+
         # If entry has no image_url, save the extracted image
         if not entry.get("image_url") and image_url:
             updates["image_url"] = image_url
             typer.echo(f"Saved extracted preview image: {image_url}")
-            
+
         table.update(entry_id, updates)
         typer.echo("Full content scraped and cached successfully.")
     except Exception as e:

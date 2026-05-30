@@ -47,7 +47,9 @@ def poll_all_feeds(db: sqlite_utils.Database) -> int:
         try:
             parsed = feedparser.parse(feed_url)
             if parsed.bozo:
-                print(f"Warning: Non-fatal parsing issues with {feed_title}: {parsed.bozo_exception}")
+                print(
+                    f"Warning: Non-fatal parsing issues with {feed_title}: {parsed.bozo_exception}"
+                )
 
             feed_entries_count = 0
             for e in parsed.entries:
@@ -55,7 +57,10 @@ def poll_all_feeds(db: sqlite_utils.Database) -> int:
                     feed_id=feed_id,
                     title=e.get("title", "No Title"),
                     summary=e.get("summary") or e.get("description") or "",
-                    published=e.get("published") or e.get("pubDate") or e.get("updated") or "",
+                    published=e.get("published")
+                    or e.get("pubDate")
+                    or e.get("updated")
+                    or "",
                     link=e.get("link", ""),
                     author=e.get("author"),
                     image_url=extract_image_url(e),
@@ -66,7 +71,9 @@ def poll_all_feeds(db: sqlite_utils.Database) -> int:
                     new_entries_count += 1
 
             if feed_entries_count > 0:
-                print(f"✅ Processed {feed_title}: {feed_entries_count} new entries added.")
+                print(
+                    f"✅ Processed {feed_title}: {feed_entries_count} new entries added."
+                )
             else:
                 print(f"Processed {feed_title}: No new entries.")
 
@@ -94,7 +101,9 @@ def run_watcher(poll_interval: float = 300.0) -> None:
             start_time = time.time()
             new_added = poll_all_feeds(db)
             duration = time.time() - start_time
-            print(f"Finished polling loop. Added {new_added} new entries (took {duration:.2f}s).")
+            print(
+                f"Finished polling loop. Added {new_added} new entries (took {duration:.2f}s)."
+            )
         except KeyboardInterrupt:
             print("Watcher daemon interrupted by user. Exiting.")
             break

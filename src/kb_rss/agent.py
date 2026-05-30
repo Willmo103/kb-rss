@@ -37,7 +37,9 @@ def get_paths(config: Config):
     return user_interests_path, agent_tastes_path
 
 
-def call_ollama(config: Config, system_prompt: str, user_prompt: str, json_mode: bool = False) -> str:
+def call_ollama(
+    config: Config, system_prompt: str, user_prompt: str, json_mode: bool = False
+) -> str:
     """
     Send chat request to Ollama endpoint.
     """
@@ -46,18 +48,18 @@ def call_ollama(config: Config, system_prompt: str, user_prompt: str, json_mode:
         "model": config.ollama_model,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ],
         "stream": False,
-        "options": {
-            "temperature": 0.1
-        }
+        "options": {"temperature": 0.1},
     }
 
     if json_mode:
         payload["format"] = "json"
 
-    print(f"Connecting to Ollama host: {config.ollama_host} using model: {config.ollama_model}...")
+    print(
+        f"Connecting to Ollama host: {config.ollama_host} using model: {config.ollama_model}..."
+    )
     try:
         response = httpx.post(url, json=payload, timeout=60.0)
         response.raise_for_status()
@@ -109,7 +111,9 @@ def update_taste_profile(db: sqlite_utils.Database) -> str:
             status_parts.append(f"SHARED ({row['shared']} times)")
 
         status_str = ", ".join(status_parts) if status_parts else "INTERACTED"
-        comment_str = f" | User Comment: '{row['comment']}'" if row.get("comment") else ""
+        comment_str = (
+            f" | User Comment: '{row['comment']}'" if row.get("comment") else ""
+        )
 
         interaction_log.append(
             f"- [{status_str}] Title: {row['title']}\n"
@@ -117,7 +121,11 @@ def update_taste_profile(db: sqlite_utils.Database) -> str:
             f"  Link: {row['link']}{comment_str}"
         )
 
-    interactions_content = "\n".join(interaction_log) if interaction_log else "No interaction history recorded yet."
+    interactions_content = (
+        "\n".join(interaction_log)
+        if interaction_log
+        else "No interaction history recorded yet."
+    )
 
     system_prompt = (
         "You are an expert user behavior and preference taste analyst.\n"
@@ -156,7 +164,11 @@ def generate_daily_suggestions(db: sqlite_utils.Database) -> str:
     user_interests_path, agent_tastes_path = get_paths(config)
 
     user_interests = user_interests_path.read_text(encoding="utf-8")
-    tastes = agent_tastes_path.read_text(encoding="utf-8") if agent_tastes_path.exists() else "No tastes profile generated yet."
+    tastes = (
+        agent_tastes_path.read_text(encoding="utf-8")
+        if agent_tastes_path.exists()
+        else "No tastes profile generated yet."
+    )
 
     # Fetch recent un-suggested feed entries from the last 48 hours, limit to 50
     # Also fetch the parent feed title so Ollama knows the source
@@ -225,7 +237,9 @@ def generate_daily_suggestions(db: sqlite_utils.Database) -> str:
             entry_id = selection.get("id")
             reason = selection.get("reason", "")
             if entry_id is not None:
-                db["rss_feed_entries"].update(entry_id, {"taste_suggested": 1, "taste_summary": reason})
+                db["rss_feed_entries"].update(
+                    entry_id, {"taste_suggested": 1, "taste_summary": reason}
+                )
                 suggested_ids.append(entry_id)
 
         # Save the daily report record
@@ -236,7 +250,7 @@ def generate_daily_suggestions(db: sqlite_utils.Database) -> str:
                 "suggested_entries": json.dumps(suggested_ids),
             },
             pk="id",
-            replace=True
+            replace=True,
         )
 
         print(f"Curation report successfully generated and saved for: {date_str}.")
