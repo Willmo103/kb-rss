@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Scrollbar Styles to match retro earth-toned design */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #44403C;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D0C0B0;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #57534E;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #CB4B16;
+}
+
+/* Custom fade-in micro-animation for articles */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Reader view typography adjustments */
+.reader-view p {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.reader-view h1, .reader-view h2, .reader-view h3, .reader-view h4 {
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.reader-view h1 { font-size: 1.35rem; }
+.reader-view h2 { font-size: 1.2rem; }
+.reader-view h3 { font-size: 1.1rem; }
+
+.reader-view img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 1rem 0;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.reader-view blockquote {
+  border-left: 3px solid #CB4B16;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.reader-view ul, .reader-view ol {
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+}
+
+.reader-view ul {
+  list-style-type: disc;
+}
+
+.reader-view ol {
+  list-style-type: decimal;
+}
+
+.reader-view li {
+  margin-bottom: 0.25rem;
+}
+
+.reader-view pre {
+  background: #F5EFEB;
+  padding: 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: monospace;
+  margin: 1rem 0;
+}
+
+.dark .reader-view pre {
+  background: #1C1917;
+  border: 1px solid #44403C;
+}

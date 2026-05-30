@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+.prompt.md
+node_modules
+dist*
+*feeds*.json

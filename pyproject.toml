@@ -7,11 +7,28 @@ authors = [
     { name = "WIll Morris", email = "88165849+Willmo103@users.noreply.github.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "kb-core",
+    "pydantic>=2.10.0",
+    "sqlite-utils>=3.38.0",
+    "typer>=0.12.0",
+    "feedparser>=6.0.11",
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.14.3",
+]
 
 [project.scripts]
-kb-rss = "kb_rss:main"
+kb-rss = "kb_rss.cli:kb_rss_cli"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.sources]
+kb-core = { git = "https://github.com/Willmo103/kb-core.git" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-mock>=3.14.0",
+]
