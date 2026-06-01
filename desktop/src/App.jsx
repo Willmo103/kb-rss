@@ -77,6 +77,8 @@ export default function App() {
   const [settingsModel, setSettingsModel] = useState('');
   const [settingsGotifyUrl, setSettingsGotifyUrl] = useState('');
   const [settingsGotifyToken, setSettingsGotifyToken] = useState('');
+  const [settingsKbWebUrl, setSettingsKbWebUrl] = useState('');
+  const [settingsKbWebApiKey, setSettingsKbWebApiKey] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Drawer comment edit state
@@ -86,6 +88,14 @@ export default function App() {
   // Drawer UI state configurations
   const [drawerExpanded, setDrawerExpanded] = useState(false);
   const [drawerMode, setDrawerMode] = useState('summary'); // 'summary' | 'web'
+
+  // RSS Sources View States
+  const [selectedSource, setSelectedSource] = useState(null);
+  const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
+  const [sourceEntries, setSourceEntries] = useState([]);
+  const [sourceOffset, setSourceOffset] = useState(0);
+  const [sourceHasMore, setSourceHasMore] = useState(true);
+  const [sourceLoading, setSourceLoading] = useState(false);
 
   const loaderRef = useRef(null);
   const webviewRef = useRef(null);
@@ -135,6 +145,8 @@ export default function App() {
         setSettingsModel(s.ollama_model || '');
         setSettingsGotifyUrl(s.gotify_url || '');
         setSettingsGotifyToken(s.gotify_token || '');
+        setSettingsKbWebUrl(s.kb_web_url || '');
+        setSettingsKbWebApiKey(s.kb_web_api_key || '');
       });
     } else if (activeTab === 'tastes') {
       loadTasteProfile();
@@ -142,6 +154,50 @@ export default function App() {
       loadDailyReports();
     }
   }, [activeTab]);
+
+  const fetchSourceEntries = async (currentOffset, reset = false) => {
+    if (!selectedSource || sourceLoading) return;
+    setSourceLoading(true);
+    try {
+      const data = await window.api.getEntries({
+        limit: 20,
+        offset: currentOffset,
+        feedId: selectedSource.id
+      });
+      if (data.length < 20) {
+        setSourceHasMore(false);
+      }
+      if (reset) {
+        setSourceEntries(data);
+      } else {
+        setSourceEntries((prev) => [...prev, ...data]);
+      }
+    } catch (err) {
+      console.error('Error fetching source entries:', err);
+    } finally {
+      setSourceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedSource) {
+      setSourceEntries([]);
+      setSourceOffset(0);
+      setSourceHasMore(true);
+      fetchSourceEntries(0, true);
+    }
+  }, [selectedSource]);
+
+  const handleSourceScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 50 && sourceHasMore && !sourceLoading) {
+      setSourceOffset((prev) => {
+        const next = prev + 20;
+        fetchSourceEntries(next, false);
+        return next;
+      });
+    }
+  };
 
   // Reset entries list when filters change
   useEffect(() => {
@@ -452,7 +508,9 @@ export default function App() {
         ollama_host: settingsHost,
         ollama_model: settingsModel,
         gotify_url: settingsGotifyUrl,
-        gotify_token: settingsGotifyToken
+        gotify_token: settingsGotifyToken,
+        kb_web_url: settingsKbWebUrl,
+        kb_web_api_key: settingsKbWebApiKey
       });
       triggerNotification('success', 'Settings saved successfully.');
     } catch (err) {
@@ -463,8 +521,27 @@ export default function App() {
     }
   };
 
-  // Article content scraping state
+  // Article content scraping & importing state
   const [scrapingArticle, setScrapingArticle] = useState(false);
+  const [importingToWeb, setImportingToWeb] = useState(false);
+
+  const handleImportToWeb = async (entryId) => {
+    setImportingToWeb(true);
+    triggerNotification('info', 'Uploading article page to kb-web...');
+    try {
+      const res = await window.api.runPythonCli(['import-to-web', entryId.toString()]);
+      if (res.status === 'success') {
+        triggerNotification('success', 'Successfully imported to kb-web!');
+      } else {
+        triggerNotification('error', `Import failed: ${res.message}`);
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      triggerNotification('error', 'Error occurred during import.');
+    } finally {
+      setImportingToWeb(false);
+    }
+  };
 
   const handleScrapeArticle = async (entryId) => {
     setScrapingArticle(true);
@@ -637,6 +714,43 @@ export default function App() {
               <Rss size={16} />
               <span>Feeds & Categories</span>
             </button>
+            <div className="space-y-1">
+              <button
+                onClick={() => setIsSourcesExpanded(!isSourcesExpanded)}
+                className={`w-full text-left px-3 py-2 rounded text-sm transition-colors flex items-center justify-between hover:bg-retro-panel-light/50 dark:hover:bg-retro-panel-dark/50`}
+              >
+                <div className="flex items-center space-x-2">
+                  <Rss size={16} className="text-retro-orange" />
+                  <span className="font-medium">RSS Sources</span>
+                </div>
+                <ChevronRight size={14} className={`transform transition-transform ${isSourcesExpanded ? 'rotate-90' : ''}`} />
+              </button>
+              
+              {isSourcesExpanded && (
+                <div className="pl-6 space-y-1 max-h-48 overflow-y-auto border-l border-retro-border-light/60 dark:border-retro-border-dark/60 ml-3">
+                  {feeds.map((feed) => (
+                    <button
+                      key={feed.id}
+                      onClick={() => {
+                        setSelectedSource(feed);
+                        setActiveTab('sources');
+                      }}
+                      className={`w-full text-left py-1 px-2 rounded text-xs transition-colors truncate block ${
+                        activeTab === 'sources' && selectedSource?.id === feed.id
+                          ? 'bg-retro-panel-light dark:bg-retro-panel-dark font-semibold text-retro-orange'
+                          : 'hover:bg-retro-panel-light/30 dark:hover:bg-retro-panel-dark/30 opacity-80 hover:opacity-100'
+                      }`}
+                      title={feed.title}
+                    >
+                      {feed.title}
+                    </button>
+                  ))}
+                  {feeds.length === 0 && (
+                    <span className="text-[10px] opacity-50 block p-2">No sources</span>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setActiveTab('tastes')}
               className={`w-full text-left px-3 py-2 rounded text-sm transition-colors flex items-center space-x-2 ${activeTab === 'tastes' ? 'bg-retro-panel-light dark:bg-retro-panel-dark font-medium text-retro-orange' : 'hover:bg-retro-panel-light/50 dark:hover:bg-retro-panel-dark/50'}`}
@@ -753,6 +867,15 @@ export default function App() {
                           <span>{entry.feed_title}</span>
                           <span>•</span>
                           <span>{entry.published ? new Date(entry.published).toLocaleDateString() : 'Recent'}</span>
+                          {entry.published_today === 1 && (
+                            <>
+                              <span>•</span>
+                              <span className="text-[10px] uppercase font-bold text-retro-green bg-retro-green/15 px-1.5 py-0.25 rounded flex items-center space-x-1">
+                                <span className="w-1 h-1 rounded-full bg-retro-green animate-pulse"></span>
+                                <span>Today</span>
+                              </span>
+                            </>
+                          )}
                         </div>
                         <h3 className="text-base font-bold tracking-tight mb-2 hover:text-retro-orange transition-colors">
                           {entry.title}
@@ -827,6 +950,101 @@ export default function App() {
               {/* Load More Trigger */}
               <div ref={loaderRef} className="h-10 flex items-center justify-center">
                 {loading && <RefreshCw className="animate-spin text-retro-orange opacity-70" size={20} />}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 1b: RSS SOURCE VIEW */}
+          {activeTab === 'sources' && selectedSource && (
+            <div className="flex-1 flex flex-col h-full overflow-hidden select-text">
+              {/* Top 1/3: Source Information */}
+              <div className="h-1/3 border-b border-retro-border-light dark:border-retro-border-dark p-6 bg-retro-bg-light/40 dark:bg-retro-panel-dark/45 overflow-y-auto flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center space-x-2 text-[10px] uppercase font-bold text-retro-orange mb-1">
+                    <span>RSS Source Metadata</span>
+                    {selectedSource.categories_str && (
+                      <>
+                        <span>•</span>
+                        <span className="bg-retro-orange/10 px-2 py-0.5 rounded">{selectedSource.categories_str}</span>
+                      </>
+                    )}
+                  </div>
+                  <h2 className="text-xl font-bold tracking-tight mb-2">{selectedSource.title}</h2>
+                  <p className="text-xs opacity-80 max-w-2xl leading-relaxed">
+                    {selectedSource.description || selectedSource.subtitle || "No description available for this RSS source."}
+                  </p>
+                </div>
+                
+                <div className="text-xs opacity-60 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6 pt-4 border-t border-retro-border-light/40 dark:border-retro-border-dark/40">
+                  <div className="truncate">
+                    <span className="font-semibold">Feed URL:</span> <span className="select-all font-mono">{selectedSource.feed_url}</span>
+                  </div>
+                  {selectedSource.link && (
+                    <div>
+                      <span className="font-semibold">Website:</span>{' '}
+                      <a
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); window.api.openUrl(selectedSource.link); }}
+                        className="text-retro-blue hover:underline inline-flex items-center space-x-1"
+                      >
+                        <span>Visit site</span>
+                        <ExternalLink size={10} />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Lower 2/3: Filtered Feed Entries */}
+              <div className="h-2/3 flex flex-col overflow-hidden bg-white/20 dark:bg-black/5">
+                <div className="px-6 py-4 border-b border-retro-border-light dark:border-retro-border-dark bg-retro-panel-light/30 dark:bg-retro-panel-dark/30 flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider">Feed Articles ({sourceEntries.length})</span>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6 space-y-4" onScroll={handleSourceScroll}>
+                  {sourceEntries.length === 0 && !sourceLoading && (
+                    <div className="text-center py-12 opacity-50">No articles found in this feed.</div>
+                  )}
+                  
+                  <div className="grid grid-cols-1 gap-4">
+                    {sourceEntries.map((entry) => (
+                      <div 
+                        key={entry.id}
+                        onClick={() => handleOpenDrawer(entry)}
+                        className={`p-4 bg-white/80 dark:bg-retro-panel-dark/80 border border-retro-border-light/70 dark:border-retro-border-dark hover:border-retro-orange cursor-pointer rounded transition-all flex flex-col justify-between ${
+                          entry.taste_suggested ? 'border-retro-orange/45 ring-1 ring-retro-orange/15 shadow-sm' : ''
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center space-x-2 text-[10px] uppercase font-semibold opacity-60 mb-1">
+                            <span>{entry.published ? new Date(entry.published).toLocaleDateString() : 'Recent'}</span>
+                            {entry.published_today === 1 && (
+                              <>
+                                <span>•</span>
+                                <span className="text-[10px] uppercase font-bold text-retro-green bg-retro-green/15 px-1.5 py-0.25 rounded flex items-center space-x-1">
+                                  <span className="w-1 h-1 rounded-full bg-retro-green animate-pulse"></span>
+                                  <span>Today</span>
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <h4 className="text-sm font-bold tracking-tight mb-1.5 hover:text-retro-orange transition-colors line-clamp-2">
+                            {entry.title}
+                          </h4>
+                          <p className="text-xs opacity-80 leading-relaxed line-clamp-2">
+                            {entry.summary ? entry.summary.replace(/<[^>]*>/g, '') : 'No summary.'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {sourceLoading && (
+                    <div className="h-10 flex items-center justify-center">
+                      <RefreshCw className="animate-spin text-retro-orange" size={20} />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1159,6 +1377,28 @@ export default function App() {
                     />
                   </div>
 
+                  <div className="border-t border-retro-border-light/60 dark:border-retro-border-dark/60 pt-4">
+                    <label className="text-xs opacity-75 font-semibold block mb-1">kb-web Server URL</label>
+                    <input
+                      type="url"
+                      placeholder="http://localhost:8050"
+                      value={settingsKbWebUrl}
+                      onChange={(e) => setSettingsKbWebUrl(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-retro-panel-dark border border-retro-border-light dark:border-retro-border-dark rounded focus:outline-none focus:border-retro-orange"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs opacity-75 font-semibold block mb-1">kb-web Ingestion API Key</label>
+                    <input
+                      type="password"
+                      placeholder="kb-secret-key"
+                      value={settingsKbWebApiKey}
+                      onChange={(e) => setSettingsKbWebApiKey(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-retro-panel-dark border border-retro-border-light dark:border-retro-border-dark rounded focus:outline-none focus:border-retro-orange"
+                    />
+                  </div>
+
                   <button
                     onClick={handleSaveSettings}
                     disabled={savingSettings}
@@ -1260,7 +1500,15 @@ export default function App() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-[10px] uppercase font-bold opacity-60">
                       <span>{selectedEntry.feed_title}</span>
-                      <span>{selectedEntry.published ? new Date(selectedEntry.published).toLocaleDateString() : 'Recent'}</span>
+                      <div className="flex items-center space-x-2">
+                        {selectedEntry.published_today === 1 && (
+                          <span className="text-[9px] uppercase font-bold text-retro-green bg-retro-green/15 px-1.5 py-0.25 rounded flex items-center space-x-1">
+                            <span className="w-1 h-1 rounded-full bg-retro-green animate-pulse"></span>
+                            <span>Today</span>
+                          </span>
+                        )}
+                        <span>{selectedEntry.published ? new Date(selectedEntry.published).toLocaleDateString() : 'Recent'}</span>
+                      </div>
                     </div>
                     <h2 className="text-base font-bold tracking-tight leading-snug">
                       {selectedEntry.title}
@@ -1378,6 +1626,19 @@ export default function App() {
                         <span className="font-bold">{selectedEntry.shared || 0}</span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* kb-web Integration */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider opacity-60 block border-b border-retro-border-light/60 dark:border-retro-border-dark/60 pb-1">kb-web Integration</label>
+                    <button
+                      onClick={() => handleImportToWeb(selectedEntry.id)}
+                      disabled={importingToWeb}
+                      className="w-full bg-retro-panel-light dark:bg-retro-panel-dark border border-retro-border-light dark:border-retro-border-dark hover:border-retro-orange hover:text-retro-orange font-semibold text-xs py-2 rounded transition-colors disabled:opacity-50 flex items-center justify-center space-x-1"
+                    >
+                      {importingToWeb ? <RefreshCw className="animate-spin" size={12} /> : <Share2 size={12} />}
+                      <span>{importingToWeb ? 'Importing...' : 'Import to kb-web'}</span>
+                    </button>
                   </div>
 
                 </div>

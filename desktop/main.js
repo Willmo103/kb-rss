@@ -24,7 +24,9 @@ function loadSettings() {
     ollama_host: process.env.OLLAMA_HOST || '192.168.0.25:11434',
     ollama_model: process.env.OLLAMA_MODEL || 'gemma4',
     gotify_url: process.env.GOTIFY_URL || '',
-    gotify_token: process.env.GOTIFY_TOKEN || ''
+    gotify_token: process.env.GOTIFY_TOKEN || '',
+    kb_web_url: process.env.KB_WEB_URL || 'http://localhost:8050',
+    kb_web_api_key: process.env.KB_API_KEY || 'kb-secret-key'
   };
   try {
     if (fs.existsSync(configPath)) {
@@ -62,7 +64,8 @@ function createWindow() {
     },
     // Earth-toned initial background
     backgroundColor: '#F4EFEA',
-    title: 'kb-rss'
+    title: 'kb-rss',
+    icon: path.join(__dirname, 'build', 'icon.png')
   });
 
   // Strip security headers to allow iframes for UAT browser preview
@@ -128,7 +131,7 @@ function createTray() {
 function updateTrayMenu() {
   if (!tray) return;
 
-  db.all('SELECT id, title, link FROM rss_feed_entries ORDER BY published DESC, id DESC LIMIT 5', (err, rows) => {
+  db.all('SELECT id, title, link FROM rss_feed_entries ORDER BY rowid DESC LIMIT 5', (err, rows) => {
     const menuTemplate = [
       {
         label: 'Open Curation App',
@@ -226,7 +229,7 @@ ipcMain.handle('get-entries', async (event, args) => {
     sql += " AND e.taste_suggested = 1";
   }
 
-  sql += " ORDER BY e.published DESC, e.id DESC LIMIT ? OFFSET ?";
+  sql += " ORDER BY e.rowid DESC LIMIT ? OFFSET ?";
   params.push(limit, offset);
 
   return new Promise((resolve, reject) => {

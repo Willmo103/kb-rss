@@ -170,13 +170,13 @@ def generate_daily_suggestions(db: sqlite_utils.Database) -> str:
         else "No tastes profile generated yet."
     )
 
-    # Fetch recent un-suggested feed entries from the last 48 hours, limit to 50
+    # Fetch recent un-suggested feed entries from the current day, limit to 50
     # Also fetch the parent feed title so Ollama knows the source
     sql = """
         SELECT e.*, f.title as feed_title
         FROM rss_feed_entries e
         JOIN rss_feeds f ON e.feed_id = f.id
-        WHERE e.taste_suggested = 0
+        WHERE e.taste_suggested = 0 AND e.published_today = 1
         ORDER BY e.created_at DESC
         LIMIT 50
     """
@@ -185,6 +185,22 @@ def generate_daily_suggestions(db: sqlite_utils.Database) -> str:
     except Exception as e:
         print(f"Error querying recent feed entries: {e}")
         raise e
+
+    if not recent_entries:
+        print("No feed entries found from today. Falling back to recent uncurated entries...")
+        sql_fallback = """
+            SELECT e.*, f.title as feed_title
+            FROM rss_feed_entries e
+            JOIN rss_feeds f ON e.feed_id = f.id
+            WHERE e.taste_suggested = 0
+            ORDER BY e.created_at DESC
+            LIMIT 50
+        """
+        try:
+            recent_entries = list(db.query(sql_fallback))
+        except Exception as e:
+            print(f"Error querying fallback entries: {e}")
+            raise e
 
     if not recent_entries:
         print("No new/unprocessed feed entries to curate suggestions from.")

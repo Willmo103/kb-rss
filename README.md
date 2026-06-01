@@ -1,4 +1,4 @@
-# kb-rss: Personal AI-Curated RSS Feeds Navigator
+# <img src="assets/kb-rss-icon.svg" width="48" height="48" valign="middle" style="margin-right: 10px;"/> kb-rss: Personal AI-Curated RSS Feeds Navigator
 
 `kb-rss` is a component of the `kb` productivity stack designed to ingest, organize, and filter RSS feeds using a local Ollama AI curator. It consists of a python background service, a command-line utility, and an Electron-based desktop reader styled in a solarized retro-cream aesthetic.
 

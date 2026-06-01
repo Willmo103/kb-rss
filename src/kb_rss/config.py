@@ -32,6 +32,8 @@ class Config(CoreConfig):
             "ollama_model": os.environ.get("OLLAMA_MODEL", "gemma4"),
             "gotify_url": os.environ.get("GOTIFY_URL", ""),
             "gotify_token": os.environ.get("GOTIFY_TOKEN", ""),
+            "kb_web_url": os.environ.get("KB_WEB_URL", "http://localhost:8050"),
+            "kb_web_api_key": os.environ.get("KB_API_KEY", "kb-secret-key"),
         }
         if self.settings_file.exists():
             try:
@@ -72,6 +74,20 @@ class Config(CoreConfig):
         Get the configured model name for Ollama.
         """
         return self._settings.get("ollama_model", "gemma4")
+
+    @property
+    def kb_web_url(self) -> str:
+        """
+        Get the configured kb-web server URL.
+        """
+        return self._settings.get("kb_web_url", "http://localhost:8050")
+
+    @property
+    def kb_web_api_key(self) -> str:
+        """
+        Get the configured kb-web API key.
+        """
+        return self._settings.get("kb_web_api_key", "kb-secret-key")
 
     def get_notifier(self) -> Gotify:
         """

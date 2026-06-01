@@ -173,11 +173,12 @@ def test_scrape_full_article_content(mocker):
       </body>
     </html>
     """
-    # Mock httpx.get
+    # Mock httpx.get and httpx.post
     mock_response = mocker.Mock()
     mock_response.text = mock_html
     mock_response.raise_for_status = mocker.Mock()
     mocker.patch("httpx.get", return_value=mock_response)
+    mocker.patch("httpx.post", return_value=mock_response)
 
     from kb_rss.db import scrape_full_article_content
 

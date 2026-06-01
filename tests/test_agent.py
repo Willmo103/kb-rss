@@ -72,18 +72,19 @@ def test_generate_daily_suggestions(temp_db, mocker, tmp_path):
     feed = RssFeed(title="Verge", link="http://verge.com")
     feed_id = save_or_update_feed(temp_db, "http://verge.com/rss", feed)
 
+    from datetime import datetime
     entry1 = FeedItemEntry(
         feed_id=feed_id,
         title="Gemma 2",
         summary="Gemma 2 released.",
-        published="2026",
+        published=datetime.now().isoformat(),
         link="http://verge.com/p1",
     )
     entry2 = FeedItemEntry(
         feed_id=feed_id,
         title="NASA Mars",
         summary="Mars expedition details.",
-        published="2026",
+        published=datetime.now().isoformat(),
         link="http://verge.com/p2",
     )
 

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" fill="#F4EFEA" rx="120"/>
+  <!-- Outer Ring (RSS style) -->
+  <circle cx="512" cy="512" r="300" stroke="#34495E" stroke-width="30" fill="none"/>
+  <!-- Inner Nodes -->
+  <line x1="312" y1="512" x2="712" y2="512" stroke="#34495E" stroke-width="15"/>
+  <line x1="512" y1="312" x2="512" y2="712" stroke="#34495E" stroke-width="15"/>
+  <circle cx="512" cy="512" r="100" fill="#2980B9"/>
+  <!-- Text 'kb' -->
+  <text x="512" y="550" font-family="Georgia, serif" font-size="100" font-weight="bold" fill="#FFFFFF" text-anchor="middle">kb</text>
+</svg>

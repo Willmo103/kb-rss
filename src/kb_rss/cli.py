@@ -20,6 +20,7 @@ from .db import (
     add_feed_by_url,
     remove_feed,
     get_or_create_category,
+    upload_entry_to_kb_web,
 )
 from .watcher import run_watcher, poll_all_feeds
 from .agent import update_taste_profile, generate_daily_suggestions
@@ -277,13 +278,21 @@ def serve(
     else:
         env["NODE_ENV"] = "production"
 
+    creationflags = 0
+    if sys.platform == "win32":
+        # DETACHED_PROCESS = 0x00000008, CREATE_NO_WINDOW = 0x08000000
+        creationflags = 0x00000008 | 0x08000000
+
     try:
-        subprocess.run(
+        subprocess.Popen(
             ["npm", "start"],
             cwd=desktop_dir,
-            check=True,
             shell=sys.platform == "win32",
             env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+            close_fds=True,
         )
     except Exception as e:
         typer.echo(f"Error launching Electron: {e}")
@@ -493,7 +502,7 @@ def fetch_full(
 
     typer.echo(f"Fetching and scraping: {link}...")
     try:
-        full_html, image_url = scrape_full_article_content(link)
+        full_html, image_url = scrape_full_article_content(link, entry.get("title"))
         updates = {"full_content": full_html}
 
         # If entry has no image_url, save the extracted image
@@ -505,6 +514,27 @@ def fetch_full(
         typer.echo("Full content scraped and cached successfully.")
     except Exception as e:
         typer.echo(f"Failed to scrape: {e}")
+        raise typer.Exit(code=1)
+
+
+@kb_rss_cli.command("import-to-web")
+def import_to_web(
+    entry_id: int = typer.Argument(
+        ..., help="The database ID of the RSS entry to upload/import to kb-web."
+    )
+):
+    """
+    Scrape (if needed) and upload/import an RSS feed entry to the configured kb-web instance.
+    """
+    db = config.get_db()
+    init_db(db)
+
+    typer.echo(f"Importing entry {entry_id} to kb-web...")
+    try:
+        upload_entry_to_kb_web(db, entry_id)
+        typer.echo("Successfully imported entry to kb-web.")
+    except Exception as e:
+        typer.echo(f"Failed to import: {e}")
         raise typer.Exit(code=1)
 
 

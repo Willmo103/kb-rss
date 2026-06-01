@@ -58,7 +58,9 @@ def extract_image_url(e: Any) -> Optional[str]:
     return None
 
 
-def scrape_full_article_content(url: str) -> Tuple[str, Optional[str]]:
+def scrape_full_article_content(
+    url: str, title: Optional[str] = None
+) -> Tuple[str, Optional[str]]:
     """
     Fetch the web page at url, scrape the main content, clean it,
     and try to extract a primary image URL.
@@ -175,6 +177,103 @@ def scrape_full_article_content(url: str) -> Tuple[str, Optional[str]]:
         )
 
 
+def upload_entry_to_kb_web(db: sqlite_utils.Database, entry_id: int) -> None:
+    """
+    Scrapes the RSS entry if needed, then uploads the page metadata and content
+    to the configured kb-web server /api/import/page POST API.
+    """
+    import os
+    import json
+    import httpx
+    import hashlib
+    import html2text
+    from pathlib import Path
+    from bs4 import BeautifulSoup
+    import urllib.parse
+
+    table = db["rss_feed_entries"]
+    existing = list(table.rows_where("id = ?", [entry_id]))
+    if not existing:
+        raise KeyError(f"RSS entry with ID {entry_id} not found.")
+
+    entry = existing[0]
+    html = entry.get("full_content")
+    url = entry.get("link")
+    title = entry.get("title")
+
+    if not html or html.strip().startswith("<p class='text-retro-red"):
+        # Not scraped yet, do it now
+        html, image_url = scrape_full_article_content(url, title)
+        updates = {"full_content": html}
+        if not entry.get("image_url") and image_url:
+            updates["image_url"] = image_url
+        table.update(entry_id, updates)
+
+    # Perform upload
+    soup_upload = BeautifulSoup(html, "html.parser")
+    h = html2text.HTML2Text()
+    h.ignore_links = True
+    md_content = h.handle(html)
+
+    links = []
+    for a in soup_upload.find_all("a", href=True):
+        href = a.get("href")
+        if href:
+            links.append(urllib.parse.urljoin(url, href))
+
+    html_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    md_hash = hashlib.sha256(md_content.encode("utf-8")).hexdigest()
+
+    payload = {
+        "url": url,
+        "title": title or (soup_upload.title.string.strip() if soup_upload.title else url),
+        "html_content": html,
+        "md_content": md_content,
+        "links": links,
+        "html_content_hash": html_hash,
+        "md_content_hash": md_hash,
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "description": None,
+        "keywords": [],
+        "tags": [],
+    }
+
+    # Load kb-web settings from configs
+    web_url = os.environ.get("KB_WEB_URL", "http://localhost:8050")
+    api_key = os.environ.get("KB_API_KEY", "kb-secret-key")
+
+    config_path = Path.home() / ".kb" / "configs" / "kb-web.json"
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                web_data = json.load(f)
+                if "api_key" in web_data:
+                    api_key = web_data["api_key"]
+        except Exception:
+            pass
+
+    rss_config_path = Path.home() / ".kb" / "configs" / "kb-rss.json"
+    if rss_config_path.exists():
+        try:
+            with open(rss_config_path, "r", encoding="utf-8") as f:
+                rss_data = json.load(f)
+                if "kb_web_url" in rss_data:
+                    web_url = rss_data["kb_web_url"]
+                if "kb_web_api_key" in rss_data:
+                    api_key = rss_data["kb_web_api_key"]
+        except Exception:
+            pass
+
+    post_headers = {"X-API-Key": api_key}
+    if api_key:
+        post_headers["Authorization"] = f"Bearer {api_key}"
+
+    post_url = urllib.parse.urljoin(web_url.rstrip("/") + "/", "api/import/page")
+
+    res = httpx.post(post_url, json=payload, headers=post_headers, timeout=15.0)
+    res.raise_for_status()
+
+
 def init_db(db: sqlite_utils.Database) -> None:
     """
     Ensure the target tables, columns, and indexes are initialized.
@@ -223,6 +322,7 @@ def init_db(db: sqlite_utils.Database) -> None:
                 "taste_suggested": int,  # 1 = suggested by AI, 0 = normal
                 "taste_summary": str,  # AI-generated explanation
                 "full_content": str,  # Cached full article text
+                "published_today": int,  # 1 = published today, 0 = normal
             },
             pk="id",
             foreign_keys=[("feed_id", "rss_feeds", "id")],
@@ -232,10 +332,14 @@ def init_db(db: sqlite_utils.Database) -> None:
         db["rss_feed_entries"].create_index(["liked"])
         db["rss_feed_entries"].create_index(["favorite"])
     else:
-        # Dynamic check and migration to support full_content column on existing db
+        # Dynamic check and migration to support new columns on existing db
         columns = db["rss_feed_entries"].columns_dict
         if "full_content" not in columns:
             db["rss_feed_entries"].add_column("full_content", str)
+        if "published_today" not in columns:
+            db["rss_feed_entries"].add_column(
+                "published_today", int, not_null_default=0
+            )
 
     # 3. Categories Table
     if "rss_categories" not in db.table_names():
@@ -353,6 +457,61 @@ def link_feed_to_category(
         table.insert({"feed_id": feed_id, "category_id": category_id})
 
 
+def parse_published_date(date_str: str) -> Optional[datetime.date]:
+    """
+    Safely parse the published date string from RSS entry into a datetime.date object.
+    Supports email/RFC 2822 style and ISO 8601 format.
+    """
+    if not date_str:
+        return None
+    import email.utils
+
+    # Try RFC 2822
+    try:
+        dt = email.utils.parsedate_to_datetime(date_str)
+        return dt.date()
+    except Exception:
+        pass
+    # Try ISO 8601
+    try:
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return dt.date()
+    except Exception:
+        pass
+    # Try standard string date split (e.g. YYYY-MM-DD)
+    try:
+        parts = date_str.split()
+        if parts:
+            dt = datetime.fromisoformat(parts[0])
+            return dt.date()
+    except Exception:
+        pass
+    return None
+
+
+def update_published_today_flags(db: sqlite_utils.Database) -> None:
+    """
+    Recalculate 'published_today' flag for all entries.
+    Sets it to 1 if the entry's published date is today (UTC or Local), otherwise 0.
+    """
+    today_local = datetime.now().date()
+    today_utc = datetime.now(timezone.utc).date()
+
+    if "rss_feed_entries" not in db.table_names():
+        return
+
+    rows = list(db["rss_feed_entries"].rows)
+    for row in rows:
+        pub_str = row.get("published")
+        pub_date = parse_published_date(pub_str)
+        is_today = 0
+        if pub_date and (pub_date == today_local or pub_date == today_utc):
+            is_today = 1
+
+        if row.get("published_today") != is_today:
+            db["rss_feed_entries"].update(row["id"], {"published_today": is_today})
+
+
 def save_new_feed_entry(
     db: sqlite_utils.Database, entry: FeedItemEntry
 ) -> Tuple[int, str]:
@@ -372,6 +531,13 @@ def save_new_feed_entry(
     if existing:
         return int(existing[0]["id"]), "exists"
 
+    pub_date = parse_published_date(entry.published)
+    today_local = datetime.now().date()
+    today_utc = datetime.now(timezone.utc).date()
+    published_today = 0
+    if pub_date and (pub_date == today_local or pub_date == today_utc):
+        published_today = 1
+
     entry_data = entry.model_dump()
     entry_data.update(
         {
@@ -383,6 +549,7 @@ def save_new_feed_entry(
             "created_at": datetime.now(timezone.utc).isoformat(),
             "taste_suggested": 0,
             "taste_summary": "",
+            "published_today": published_today,
         }
     )
     record = table.insert(entry_data)

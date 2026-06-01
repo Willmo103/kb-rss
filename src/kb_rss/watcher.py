@@ -11,7 +11,7 @@ import feedparser
 import sqlite_utils
 
 from .config import Config
-from .db import init_db, save_new_feed_entry, extract_image_url
+from .db import init_db, save_new_feed_entry, extract_image_url, update_published_today_flags
 from .models import FeedItemEntry
 
 
@@ -27,6 +27,7 @@ def poll_all_feeds(db: sqlite_utils.Database) -> int:
         int: Number of new entries added across all feeds.
     """
     init_db(db)
+    update_published_today_flags(db)
     feeds_table = db["rss_feeds"]
     new_entries_count = 0
 
