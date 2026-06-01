@@ -22,9 +22,33 @@ def run_step(cmd: list[str], description: str, cwd: Path = None):
         sys.exit(1)
 
 
+def clean_previous_builds():
+    import shutil
+    project_dir = Path(__file__).resolve().parent
+    
+    # 1. Clean project_dir / "dist"
+    dist_dir = project_dir / "dist"
+    if dist_dir.exists() and dist_dir.is_dir():
+        print(f"Cleaning previous build directory: {dist_dir}")
+        try:
+            shutil.rmtree(dist_dir)
+        except Exception as e:
+            print(f"Warning: Failed to clean {dist_dir}: {e}")
+            
+    # 2. Clean project_dir / "desktop" / "dist"
+    desktop_dist = project_dir / "desktop" / "dist"
+    if desktop_dist.exists() and desktop_dist.is_dir():
+        print(f"Cleaning previous desktop build directory: {desktop_dist}")
+        try:
+            shutil.rmtree(desktop_dist)
+        except Exception as e:
+            print(f"Warning: Failed to clean {desktop_dist}: {e}")
+
+
 def main():
     import os
 
+    clean_previous_builds()
     os.environ["USE_SYSTEM_SIGNCODE"] = "true"
     project_dir = Path(__file__).resolve().parent
     desktop_dir = project_dir / "desktop"
