@@ -226,7 +226,8 @@ def upload_entry_to_kb_web(db: sqlite_utils.Database, entry_id: int) -> None:
 
     payload = {
         "url": url,
-        "title": title or (soup_upload.title.string.strip() if soup_upload.title else url),
+        "title": title
+        or (soup_upload.title.string.strip() if soup_upload.title else url),
         "html_content": html,
         "md_content": md_content,
         "links": links,

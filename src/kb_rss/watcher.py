@@ -11,7 +11,12 @@ import feedparser
 import sqlite_utils
 
 from .config import Config
-from .db import init_db, save_new_feed_entry, extract_image_url, update_published_today_flags
+from .db import (
+    init_db,
+    save_new_feed_entry,
+    extract_image_url,
+    update_published_today_flags,
+)
 from .models import FeedItemEntry
 
 

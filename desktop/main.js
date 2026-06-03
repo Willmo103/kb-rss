@@ -99,20 +99,11 @@ function createWindow() {
 }
 
 function createTray() {
-  // Use a fallback built-in icon or generic name (we'll check for a dummy file or create a standard color block)
-  // To avoid packaging crash if icon doesn't exist, we create a simple 16x16 dummy image or use standard platform methods.
-  // We will assume a simple blank tray or look for a icon file if user adds one later.
-  let trayIconPath = path.join(__dirname, 'tray-icon.png');
-  if (!fs.existsSync(trayIconPath)) {
-    // Generate a simple colored tray placeholder to avoid crashing
-    // For now we pass a dummy or require a small icon
-    trayIconPath = path.join(projectRoot, 'src', 'kb_rss', '__init__.py'); // Use any file as fallback, or blank
-  }
+  const trayIconPath = path.join(__dirname, 'tray-icon.png');
+  const trayIcon = fs.existsSync(trayIconPath) ? trayIconPath : path.join(__dirname, 'package.json');
   
   try {
-    // On Windows/Linux we can create a blank icon or pass standard icon path
-    // We'll catch and print errors if any issues loading tray icon
-    tray = new Tray(fs.existsSync(path.join(__dirname, 'tray-icon.png')) ? path.join(__dirname, 'tray-icon.png') : path.join(__dirname, 'package.json'));
+    tray = new Tray(trayIcon);
     tray.setToolTip('kb-rss feed manager');
     
     tray.on('double-click', () => {

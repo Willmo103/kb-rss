@@ -187,7 +187,9 @@ def generate_daily_suggestions(db: sqlite_utils.Database) -> str:
         raise e
 
     if not recent_entries:
-        print("No feed entries found from today. Falling back to recent uncurated entries...")
+        print(
+            "No feed entries found from today. Falling back to recent uncurated entries..."
+        )
         sql_fallback = """
             SELECT e.*, f.title as feed_title
             FROM rss_feed_entries e

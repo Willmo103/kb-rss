@@ -73,6 +73,7 @@ def test_generate_daily_suggestions(temp_db, mocker, tmp_path):
     feed_id = save_or_update_feed(temp_db, "http://verge.com/rss", feed)
 
     from datetime import datetime
+
     entry1 = FeedItemEntry(
         feed_id=feed_id,
         title="Gemma 2",
