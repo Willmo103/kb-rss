@@ -63,6 +63,38 @@ def main():
         cwd=desktop_dir,
     )
 
+    # 1b. Copy compiled Electron executable and rss_feeds.json to package source
+    import shutil
+    dest_dir = project_dir / "src" / "kb_rss" / "desktop_dist"
+    if dest_dir.exists():
+        shutil.rmtree(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    
+    desktop_dist = desktop_dir / "dist"
+    candidates = list(desktop_dist.glob("kb-rss*.exe")) + \
+                 list(desktop_dist.glob("kb-rss*.AppImage")) + \
+                 list(desktop_dist.glob("kb-rss*.dmg"))
+    if not candidates:
+        candidates = [p for p in desktop_dist.iterdir() if p.is_file() and p.suffix in ('.exe', '.AppImage', '.dmg')]
+        
+    if candidates:
+        src_exe = candidates[0]
+        ext = src_exe.suffix
+        dest_exe = dest_dir / f"kb-rss{ext}"
+        print(f"\nPackaging built Electron executable: {src_exe.name} -> {dest_exe}")
+        shutil.copy2(src_exe, dest_exe)
+    else:
+        print("\n[WARNING] No compiled Electron executable found to package.")
+
+    # Copy rss_feeds.json as package data
+    src_feeds = project_dir / "rss_feeds.json"
+    dest_feeds = project_dir / "src" / "kb_rss" / "rss_feeds.json"
+    if src_feeds.exists():
+        print(f"Packaging default feeds: {src_feeds.name} -> {dest_feeds}")
+        shutil.copy2(src_feeds, dest_feeds)
+    else:
+        print("\n[WARNING] rss_feeds.json not found to package.")
+
     # 2. Sync python project environment
     run_step(
         ["uv", "sync"],

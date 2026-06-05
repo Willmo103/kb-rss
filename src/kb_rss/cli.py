@@ -223,39 +223,139 @@ def status():
 @kb_rss_cli.command("install")
 def install():
     """
-    Install the RSS watcher daemon to start automatically on Windows logon.
-    Creates a silent batch script shortcut in the Windows Startup directory.
+    Perform unified installation of the application:
+    1. Initialize the SQLite database and run migrations/seeding.
+    2. Stage the desktop app binary in the local binary directory.
+    3. Add the local binary directory to the user's system PATH.
+    4. Create a desktop shortcut.
+    5. Register the RSS background watcher to run at logon (Windows startup).
     """
-    if sys.platform != "win32":
-        typer.echo("Autostart installation is currently only supported on Windows.")
-        raise typer.Exit(code=1)
+    import shutil
 
-    startup_dir = (
-        Path.home()
-        / "AppData"
-        / "Roaming"
-        / "Microsoft"
-        / "Windows"
-        / "Start Menu"
-        / "Programs"
-        / "Startup"
-    )
-    startup_dir.mkdir(parents=True, exist_ok=True)
+    # 1. Run DB migration/initialization
+    db = config.get_db()
+    init_db(db)
+    typer.echo("Database migrations and seeding successfully executed.")
 
-    # Resolve pythonw path
-    executable = sys.executable
-    if executable.endswith("python.exe"):
-        w_executable = executable[:-10] + "pythonw.exe"
-        if Path(w_executable).exists():
-            executable = w_executable
+    # 2. Setup standard binary path ~/.kb/bin
+    bin_dir = Path.home() / ".kb" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
 
-    startup_script = startup_dir / "start_kb_rss.cmd"
-    script_content = f'@echo off\nstart "" "{executable}" -c "import kb_rss.watcher; kb_rss.watcher.run_watcher()"\n'
-    try:
-        startup_script.write_text(script_content)
-        typer.echo(f"Successfully installed startup script at: {startup_script}")
-    except Exception as e:
-        typer.echo(f"Failed to install startup script: {e}")
+    # 3. Locate and copy packaged portable executable
+    package_dir = Path(__file__).resolve().parent
+    base_name = "kb-rss.exe" if sys.platform == "win32" else "kb-rss"
+    bundled_exe = package_dir / "desktop_dist" / base_name
+    dest_name = "kb-rss-desktop.exe" if sys.platform == "win32" else "kb-rss-desktop"
+    dest_exe = bin_dir / dest_name
+
+    if bundled_exe.exists():
+        try:
+            shutil.copy2(bundled_exe, dest_exe)
+            typer.echo(f"Installed Electron desktop binary to: {dest_exe}")
+        except Exception as e:
+            typer.echo(f"Failed to copy Electron binary to bin: {e}")
+    else:
+        typer.echo("Warning: No bundled Electron application binary found to install.")
+
+    # 4. Add bin directory to PATH
+    if sys.platform == "win32":
+        import winreg
+        import ctypes
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_ALL_ACCESS)
+            path_val, _ = winreg.QueryValueEx(key, "Path")
+            paths = [p.strip() for p in path_val.split(";")]
+            bin_path_str = str(bin_dir)
+            if bin_path_str not in paths:
+                paths.append(bin_path_str)
+                new_path_val = ";".join(paths)
+                winreg.SetValueEx(key, "Path", 0, winreg.REG_SZ, new_path_val)
+                # Broadcast WM_SETTINGCHANGE to notify running shells
+                HWND_BROADCAST = 0xFFFF
+                WM_SETTINGCHANGE = 0x001A
+                ctypes.windll.user32.SendMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, "Environment")
+                typer.echo(f"Added {bin_dir} to User PATH.")
+            else:
+                typer.echo(f"{bin_dir} is already in PATH.")
+        except Exception as e:
+            typer.echo(f"Failed to modify Windows PATH registry: {e}")
+    else:
+        bin_path_str = str(bin_dir)
+        for rc in [".bashrc", ".zshrc", ".profile"]:
+            rc_path = Path.home() / rc
+            if rc_path.exists():
+                try:
+                    content = rc_path.read_text(errors="ignore")
+                    export_line = f'export PATH="$PATH:{bin_path_str}"'
+                    if export_line not in content:
+                        with open(rc_path, "a") as f:
+                            f.write(f"\n{export_line}\n")
+                        typer.echo(f"Added PATH export to {rc}")
+                except Exception as e:
+                    typer.echo(f"Failed to write to {rc}: {e}")
+
+    # 5. Create desktop shortcut
+    if sys.platform == "win32" and dest_exe.exists():
+        desktop = Path.home() / "Desktop"
+        shortcut_path = desktop / "kb-rss.lnk"
+        ps_cmd = f"""
+        $WshShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WshShell.CreateShortcut('{shortcut_path}')
+        $Shortcut.TargetPath = '{dest_exe}'
+        $Shortcut.WorkingDirectory = '{bin_dir}'
+        $Shortcut.Save()
+        """
+        try:
+            subprocess.run(["powershell", "-Command", ps_cmd], check=True, capture_output=True)
+            typer.echo(f"Created desktop shortcut: {shortcut_path}")
+        except Exception as e:
+            typer.echo(f"Failed to create desktop shortcut: {e}")
+    elif sys.platform != "win32" and dest_exe.exists():
+        desktop = Path.home() / "Desktop"
+        shortcut_path = desktop / "kb-rss.desktop"
+        content = f"""[Desktop Entry]
+Name=kb-rss
+Exec={dest_exe}
+Type=Application
+Terminal=false
+"""
+        try:
+            shortcut_path.write_text(content)
+            shortcut_path.chmod(0o755)
+            typer.echo(f"Created desktop shortcut: {shortcut_path}")
+        except Exception as e:
+            typer.echo(f"Failed to create desktop shortcut: {e}")
+
+    # 6. Autostart setup for Windows startup directory
+    if sys.platform == "win32":
+        startup_dir = (
+            Path.home()
+            / "AppData"
+            / "Roaming"
+            / "Microsoft"
+            / "Windows"
+            / "Start Menu"
+            / "Programs"
+            / "Startup"
+        )
+        startup_dir.mkdir(parents=True, exist_ok=True)
+
+        # Resolve the pythonw.exe path for silent execution
+        executable = sys.executable
+        if executable.endswith("python.exe"):
+            w_executable = executable[:-10] + "pythonw.exe"
+            if Path(w_executable).exists():
+                executable = w_executable
+
+        startup_script = startup_dir / "start_kb_rss.cmd"
+        script_content = f'@echo off\nstart "" "{executable}" -c "import kb_rss.watcher; kb_rss.watcher.run_watcher()"\n'
+        try:
+            startup_script.write_text(script_content)
+            typer.echo(f"Successfully installed startup script at: {startup_script}")
+        except Exception as e:
+            typer.echo(f"Failed to install startup script: {e}")
+    else:
+        typer.echo("Note: Background daemon autostart configuration is only supported on Windows.")
 
 
 @kb_rss_cli.command("serve")
@@ -269,33 +369,91 @@ def serve(
     """
     Launch the Electron desktop application.
     """
-    desktop_dir = Path(__file__).resolve().parent.parent.parent / "desktop"
-    typer.echo("Launching Electron application...")
+    import shutil
+    package_dir = Path(__file__).resolve().parent
+    src_desktop_dir = package_dir.parent.parent / "desktop"
 
-    env = os.environ.copy()
-    if dev:
-        env["NODE_ENV"] = "development"
+    if src_desktop_dir.exists() and (src_desktop_dir / "package.json").exists():
+        # Development / Source checkout mode
+        typer.echo("Launching Electron application in development source mode...")
+        env = os.environ.copy()
+        if dev:
+            env["NODE_ENV"] = "development"
+        else:
+            env["NODE_ENV"] = "production"
+
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = 0x00000008 | 0x08000000
+
+        try:
+            subprocess.Popen(
+                ["npm", "start"],
+                cwd=src_desktop_dir,
+                shell=sys.platform == "win32",
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+                close_fds=True,
+            )
+            return
+        except Exception as e:
+            typer.echo(f"Error launching Electron via npm start: {e}")
+            raise typer.Exit(code=1)
+
+    # Installed / Packaged mode
+    # First check if the desktop app is in PATH under the distinct name "kb-rss-desktop"
+    exe_name = "kb-rss-desktop"
+    if sys.platform == "win32":
+        exe_name += ".exe"
+
+    path_exe = shutil.which(exe_name)
+    target_exe = None
+
+    if path_exe:
+        target_exe = Path(path_exe)
     else:
-        env["NODE_ENV"] = "production"
+        # Check standard installation locations or packaged desktop_dist folder
+        base_name = "kb-rss.exe" if sys.platform == "win32" else "kb-rss"
+        bundled_candidate = package_dir / "desktop_dist" / base_name
+        
+        # User app data local program files location (NSIS)
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        install_candidate = None
+        if sys.platform == "win32" and local_app_data:
+            install_candidate = Path(local_app_data) / "Programs" / "kb-rss" / "kb-rss.exe"
 
+        if bundled_candidate.exists():
+            target_exe = bundled_candidate
+        elif install_candidate and install_candidate.exists():
+            target_exe = install_candidate
+
+    if not target_exe:
+        typer.echo("Error: Could not find built Electron application executable (kb-rss-desktop).")
+        typer.echo("Please run 'kb-rss install' first to compile and install the desktop assets.")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Launching Electron application: {target_exe}")
     creationflags = 0
     if sys.platform == "win32":
-        # DETACHED_PROCESS = 0x00000008, CREATE_NO_WINDOW = 0x08000000
         creationflags = 0x00000008 | 0x08000000
+
+    env = os.environ.copy()
+    env["NODE_ENV"] = "production"
 
     try:
         subprocess.Popen(
-            ["npm", "start"],
-            cwd=desktop_dir,
-            shell=sys.platform == "win32",
-            env=env,
+            [str(target_exe)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=creationflags,
             close_fds=True,
+            env=env
         )
     except Exception as e:
-        typer.echo(f"Error launching Electron: {e}")
+        typer.echo(f"Error executing Electron binary: {e}")
+        raise typer.Exit(code=1)
 
 
 @kb_rss_cli.command("agent-run")

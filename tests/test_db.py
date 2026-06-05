@@ -18,7 +18,7 @@ def temp_db(tmp_path):
     """
     db_file = tmp_path / "test_kb.db"
     db = sqlite_utils.Database(str(db_file))
-    init_db(db)
+    init_db(db, seed=False)
     return db
 
 

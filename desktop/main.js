@@ -10,7 +10,160 @@ let tray;
 
 // Resolve SQLite Database path: ~/.kb/kb.db
 const dbPath = path.join(os.homedir(), '.kb', 'kb.db');
-const db = new sqlite3.Database(dbPath);
+
+// Ensure database directory exists
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error('Database connection error:', err);
+  } else {
+    // Run database migrations/table creation
+    db.serialize(() => {
+      // 1. rss_feeds
+      db.run(`
+        CREATE TABLE IF NOT EXISTS rss_feeds (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          feed_url TEXT UNIQUE,
+          link TEXT,
+          title TEXT,
+          subtitle TEXT,
+          updated TEXT,
+          image_href TEXT,
+          image_title TEXT,
+          image_link TEXT,
+          description TEXT
+        )
+      `);
+      db.run("CREATE INDEX IF NOT EXISTS idx_feeds_feed_url ON rss_feeds(feed_url)");
+      db.run("CREATE INDEX IF NOT EXISTS idx_feeds_link ON rss_feeds(link)");
+
+      // 2. rss_feed_entries
+      db.run(`
+        CREATE TABLE IF NOT EXISTS rss_feed_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          feed_id INTEGER,
+          title TEXT,
+          summary TEXT,
+          published TEXT,
+          link TEXT UNIQUE,
+          author TEXT,
+          image_url TEXT,
+          liked INTEGER DEFAULT 0,
+          favorite INTEGER DEFAULT 0,
+          comment TEXT,
+          clicked INTEGER DEFAULT 0,
+          shared INTEGER DEFAULT 0,
+          created_at TEXT,
+          taste_suggested INTEGER DEFAULT 0,
+          taste_summary TEXT,
+          full_content TEXT,
+          published_today INTEGER DEFAULT 0,
+          FOREIGN KEY(feed_id) REFERENCES rss_feeds(id)
+        )
+      `);
+      db.run("CREATE INDEX IF NOT EXISTS idx_entries_link ON rss_feed_entries(link)");
+      db.run("CREATE INDEX IF NOT EXISTS idx_entries_feed_id ON rss_feed_entries(feed_id)");
+      db.run("CREATE INDEX IF NOT EXISTS idx_entries_liked ON rss_feed_entries(liked)");
+      db.run("CREATE INDEX IF NOT EXISTS idx_entries_favorite ON rss_feed_entries(favorite)");
+
+      // 3. rss_categories
+      db.run(`
+        CREATE TABLE IF NOT EXISTS rss_categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE
+        )
+      `);
+      db.run("CREATE INDEX IF NOT EXISTS idx_categories_name ON rss_categories(name)");
+
+      // 4. rss_feed_categories
+      db.run(`
+        CREATE TABLE IF NOT EXISTS rss_feed_categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          feed_id INTEGER,
+          category_id INTEGER,
+          UNIQUE(feed_id, category_id),
+          FOREIGN KEY(feed_id) REFERENCES rss_feeds(id),
+          FOREIGN KEY(category_id) REFERENCES rss_categories(id)
+        )
+      `);
+
+      // 5. rss_daily_reports
+      db.run(`
+        CREATE TABLE IF NOT EXISTS rss_daily_reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT UNIQUE,
+          report_content TEXT,
+          suggested_entries TEXT
+        )
+      `);
+      db.run("CREATE INDEX IF NOT EXISTS idx_reports_date ON rss_daily_reports(date)");
+
+      // Seed database if empty
+      seedDatabaseIfEmpty();
+    });
+  }
+});
+
+// Seed default feeds if empty
+function seedDatabaseIfEmpty() {
+  db.get("SELECT COUNT(*) as count FROM rss_feeds", (err, row) => {
+    if (err) {
+      console.error("Error checking feeds count:", err);
+      return;
+    }
+    if (row && row.count === 0) {
+      console.log("Database is empty. Seeding default feeds...");
+      const seedPath = path.join(__dirname, 'rss_feeds.json');
+      if (fs.existsSync(seedPath)) {
+        try {
+          const feedsData = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+          db.serialize(() => {
+            for (const [category, sources] of Object.entries(feedsData)) {
+              // Insert category
+              db.run("INSERT OR IGNORE INTO rss_categories (name) VALUES (?)", [category], function(err) {
+                if (err) {
+                  console.error("Error inserting category:", err);
+                  return;
+                }
+                
+                // Retrieve category ID
+                db.get("SELECT id FROM rss_categories WHERE name = ?", [category], (err, catRow) => {
+                  if (err || !catRow) return;
+                  const catId = catRow.id;
+                  
+                  sources.forEach((source) => {
+                    db.run(
+                      "INSERT OR IGNORE INTO rss_feeds (feed_url, title, description, link, subtitle, updated, image_href, image_title, image_link) VALUES (?, ?, ?, '', ?, '', '', '', '')",
+                      [source.url, source.title, source.description, source.description],
+                      function(err) {
+                        if (err) {
+                          console.error("Error inserting feed:", err);
+                          return;
+                        }
+                        
+                        db.get("SELECT id FROM rss_feeds WHERE feed_url = ?", [source.url], (err, feedRow) => {
+                          if (err || !feedRow) return;
+                          const feedId = feedRow.id;
+                          db.run("INSERT OR IGNORE INTO rss_feed_categories (feed_id, category_id) VALUES (?, ?)", [feedId, catId]);
+                        });
+                      }
+                    );
+                  });
+                });
+              });
+            }
+          });
+        } catch (e) {
+          console.error("Failed to seed default feeds:", e);
+        }
+      }
+    }
+  });
+}
 
 // Resolve package root for spawning Python CLI subprocesses
 const projectRoot = path.resolve(__dirname, '..');

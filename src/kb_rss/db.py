@@ -275,12 +275,13 @@ def upload_entry_to_kb_web(db: sqlite_utils.Database, entry_id: int) -> None:
     res.raise_for_status()
 
 
-def init_db(db: sqlite_utils.Database) -> None:
+def init_db(db: sqlite_utils.Database, seed: bool = True) -> None:
     """
     Ensure the target tables, columns, and indexes are initialized.
 
     Args:
         db (sqlite_utils.Database): The target SQLite Database.
+        seed (bool): If True, seed default feeds when the database is empty.
     """
     # 1. Feeds Metadata Table
     if "rss_feeds" not in db.table_names():
@@ -381,6 +382,44 @@ def init_db(db: sqlite_utils.Database) -> None:
             pk="id",
         )
         db["rss_daily_reports"].create_index(["date"], unique=True)
+
+    # Seed default feeds if database is empty
+    if seed and db["rss_feeds"].count == 0:
+        import json
+        from pathlib import Path
+        seed_path = Path(__file__).resolve().parent / "rss_feeds.json"
+        if seed_path.exists():
+            try:
+                with open(seed_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for cat_name, sources in data.items():
+                    cat_id = get_or_create_category(db, cat_name)
+                    for src in sources:
+                        url = src.get("url")
+                        title = src.get("title", "Unknown Title")
+                        desc = src.get("description", "")
+                        if url:
+                            table = db["rss_feeds"]
+                            existing = list(table.rows_where("feed_url = ?", [url]))
+                            if not existing:
+                                record = table.insert({
+                                    "feed_url": url,
+                                    "title": title,
+                                    "description": desc,
+                                    "link": "",
+                                    "subtitle": desc,
+                                    "updated": "",
+                                    "image_href": "",
+                                    "image_title": "",
+                                    "image_link": ""
+                                })
+                                feed_id = record.last_pk
+                            else:
+                                feed_id = existing[0]["id"]
+                            link_feed_to_category(db, feed_id, cat_id)
+            except Exception as e:
+                print(f"Warning: Failed to seed default feeds: {e}")
+
 
 
 def get_or_create_category(db: sqlite_utils.Database, name: str) -> int:

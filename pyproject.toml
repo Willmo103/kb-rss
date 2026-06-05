@@ -33,3 +33,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.14.0",
 ]
+
+[tool.uv.build-backend]
+source-include = ["src/kb_rss/desktop_dist/**/*", "src/kb_rss/rss_feeds.json"]
+
