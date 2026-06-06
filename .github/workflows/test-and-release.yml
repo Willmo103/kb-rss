@@ -40,7 +40,7 @@ jobs:
       - name: Run Python tests
         shell: bash
         run: |
-          uv sync
+          uv sync --upgrade-package kb-core
           uv run pytest
 
       - name: Bump version and push release tag
