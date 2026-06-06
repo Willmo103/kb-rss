@@ -589,10 +589,26 @@ ipcMain.handle('run-python-cli', async (event, args) => {
   return new Promise((resolve) => {
     // Format command with safety
     const cmdArgs = args.map(arg => `"${arg.replace(/"/g, '\\"')}"`).join(' ');
-    const commandLine = `uv run kb-rss ${cmdArgs}`;
+    
+    const isDev = process.env.NODE_ENV === 'development';
+    let cmd = 'uv run kb-rss';
+    let execOpts = { cwd: projectRoot };
+    
+    if (!isDev) {
+      const localBinName = os.platform() === 'win32' ? 'kb-rss.exe' : 'kb-rss';
+      const localBinPath = path.join(os.homedir(), '.local', 'bin', localBinName);
+      if (fs.existsSync(localBinPath)) {
+        cmd = `"${localBinPath}"`;
+      } else {
+        cmd = 'kb-rss';
+      }
+      execOpts = {};
+    }
+    
+    const commandLine = `${cmd} ${cmdArgs}`;
     console.log(`Executing background python command: ${commandLine}`);
     
-    exec(commandLine, { cwd: projectRoot }, (error, stdout, stderr) => {
+    exec(commandLine, execOpts, (error, stdout, stderr) => {
       if (error) {
         console.error(`Python CLI failure: ${stderr || error.message}`);
         resolve({ status: 'error', message: stderr || error.message });

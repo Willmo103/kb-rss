@@ -3,14 +3,29 @@ import sys
 from pathlib import Path
 
 
+def get_uv_cmd() -> str:
+    import shutil
+    
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return uv_path
+        
+    local_bin = Path.home() / ".local" / "bin"
+    candidate = local_bin / ("uv.exe" if sys.platform == "win32" else "uv")
+    if candidate.exists():
+        return str(candidate)
+        
+    return "uv"
+
+
 def run_step(cmd: list[str], description: str, cwd: Path = None):
-    print(f"\n=========================================")
+    print("\n=========================================")
     print(f"Step: {description}")
     print(f"Running: {' '.join(cmd)}")
-    print(f"=========================================")
+    print("=========================================")
     try:
         # Use shell=True on Windows to support running commands correctly in all shell contexts
-        result = subprocess.run(cmd, check=True, shell=sys.platform == "win32", cwd=cwd)
+        subprocess.run(cmd, check=True, shell=sys.platform == "win32", cwd=cwd)
     except subprocess.CalledProcessError as e:
         print(f"\n[ERROR] Step failed: {description}")
         print(f"Command returned non-zero exit code: {e.returncode}")
@@ -74,8 +89,11 @@ def main():
     candidates = list(desktop_dist.glob("kb-rss*.exe")) + \
                  list(desktop_dist.glob("kb-rss*.AppImage")) + \
                  list(desktop_dist.glob("kb-rss*.dmg"))
+    # Filter out setup/installer files to ensure we only get the portable executable
+    candidates = [p for p in candidates if "setup" not in p.name.lower()]
+    
     if not candidates:
-        candidates = [p for p in desktop_dist.iterdir() if p.is_file() and p.suffix in ('.exe', '.AppImage', '.dmg')]
+        candidates = [p for p in desktop_dist.iterdir() if p.is_file() and p.suffix in ('.exe', '.AppImage', '.dmg') and "setup" not in p.name.lower()]
         
     if candidates:
         src_exe = candidates[0]
@@ -96,17 +114,18 @@ def main():
         print("\n[WARNING] rss_feeds.json not found to package.")
 
     # 2. Sync python project environment
+    uv_cmd = get_uv_cmd()
     run_step(
-        ["uv", "sync"],
+        [uv_cmd, "sync"],
         "Synchronizing python environment & dependencies",
         cwd=project_dir,
     )
 
     # 3. Run unit tests
-    run_step(["uv", "run", "pytest"], "Running pytest suite", cwd=project_dir)
+    run_step([uv_cmd, "run", "pytest"], "Running pytest suite", cwd=project_dir)
 
     # 4. Build python packaging artifacts
-    run_step(["uv", "build"], "Building source and wheel packages", cwd=project_dir)
+    run_step([uv_cmd, "build"], "Building source and wheel packages", cwd=project_dir)
 
     # 5. Copy artifacts to ARTIFACTS_ROOT if set
     copy_artifacts()

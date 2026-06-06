@@ -42,8 +42,10 @@
       "build/**/*"
     ],
     "win": {
+      "icon": "../assets/cli-icon.ico",
       "target": [
-        "portable"
+        "portable",
+        "nsis"
       ],
       "signAndEditExecutable": false
     },
