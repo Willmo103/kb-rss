@@ -246,6 +246,12 @@ function createWindow() {
     }
   });
 
+  // Intercept minimize event to collapse to system tray (hide instead of standard minimize)
+  mainWindow.on('minimize', (event) => {
+    event.preventDefault();
+    mainWindow.hide();
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -261,6 +267,7 @@ function createTray() {
     
     tray.on('double-click', () => {
       if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
         mainWindow.focus();
       }
@@ -281,6 +288,7 @@ function updateTrayMenu() {
         label: 'Open Curation App',
         click: () => {
           if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
           }

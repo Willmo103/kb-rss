@@ -15,6 +15,7 @@ from typing import Optional
 import typer
 
 from .config import Config
+from kb_core.utils import download_github_release_asset, check_github_latest_release
 from .db import (
     init_db,
     add_feed_by_url,
@@ -255,7 +256,18 @@ def install():
         except Exception as e:
             typer.echo(f"Failed to copy Electron binary to bin: {e}")
     else:
-        typer.echo("Warning: No bundled Electron application binary found to install.")
+        typer.echo("No bundled Electron application binary found to install.")
+        typer.echo("Downloading the prebuilt desktop binary from the latest GitHub release...")
+        asset_pattern = r"kb-rss.*\.exe" if sys.platform == "win32" else r"kb-rss.*"
+        success = download_github_release_asset(
+            repo="Willmo103/kb-rss",
+            asset_pattern=asset_pattern,
+            dest_path=dest_exe
+        )
+        if success:
+            typer.echo(f"Successfully downloaded and installed latest desktop binary to: {dest_exe}")
+        else:
+            typer.echo("Warning: Failed to download prebuilt desktop binary from GitHub Releases.")
 
     # 4. Add bin directory to PATH
     if sys.platform == "win32":
@@ -303,6 +315,7 @@ def install():
         $Shortcut = $WshShell.CreateShortcut('{shortcut_path}')
         $Shortcut.TargetPath = '{dest_exe}'
         $Shortcut.WorkingDirectory = '{bin_dir}'
+        $Shortcut.IconLocation = '{dest_exe},0'
         $Shortcut.Save()
         """
         try:
@@ -430,9 +443,24 @@ def serve(
             target_exe = install_candidate
 
     if not target_exe:
-        typer.echo("Error: Could not find built Electron application executable (kb-rss-desktop).")
-        typer.echo("Please run 'kb-rss install' first to compile and install the desktop assets.")
-        raise typer.Exit(code=1)
+        typer.echo("Could not find built Electron application executable (kb-rss-desktop).")
+        typer.echo("Attempting to download prebuilt desktop binary from the latest GitHub release...")
+        bin_dir = Path.home() / ".kb" / "bin"
+        dest_name = "kb-rss-desktop.exe" if sys.platform == "win32" else "kb-rss-desktop"
+        dest_exe = bin_dir / dest_name
+        asset_pattern = r"kb-rss.*\.exe" if sys.platform == "win32" else r"kb-rss.*"
+        success = download_github_release_asset(
+            repo="Willmo103/kb-rss",
+            asset_pattern=asset_pattern,
+            dest_path=dest_exe
+        )
+        if success:
+            target_exe = dest_exe
+            typer.echo(f"Successfully downloaded latest desktop binary to: {target_exe}")
+        else:
+            typer.echo("Error: Could not download prebuilt desktop binary from GitHub Releases.")
+            typer.echo("Please run 'kb-rss install' first to install the desktop assets.")
+            raise typer.Exit(code=1)
 
     typer.echo(f"Launching Electron application: {target_exe}")
     creationflags = 0
@@ -698,6 +726,45 @@ def import_to_web(
 
 def main():
     kb_rss_cli()
+
+
+@kb_rss_cli.command("update")
+def update():
+    """
+    Check the latest GitHub Release and download the updated desktop application if available.
+    """
+    typer.echo("Checking for updates on GitHub release channel...")
+    release = check_github_latest_release("Willmo103/kb-rss")
+    if not release:
+        typer.echo("Could not check latest release on GitHub.")
+        raise typer.Exit(code=1)
+
+    tag_name = release.get("tag_name", "unknown")
+    typer.echo(f"Latest release version: {tag_name}")
+
+    import importlib.metadata
+    try:
+        current_version = "v" + importlib.metadata.version("kb-rss")
+    except Exception:
+        current_version = "v0.1.0"
+
+    typer.echo(f"Current local package version: {current_version}")
+
+    bin_dir = Path.home() / ".kb" / "bin"
+    dest_name = "kb-rss-desktop.exe" if sys.platform == "win32" else "kb-rss-desktop"
+    dest_exe = bin_dir / dest_name
+
+    typer.echo(f"Downloading prebuilt desktop binary {tag_name}...")
+    asset_pattern = r"kb-rss.*\.exe" if sys.platform == "win32" else r"kb-rss.*"
+    success = download_github_release_asset(
+        repo="Willmo103/kb-rss",
+        asset_pattern=asset_pattern,
+        dest_path=dest_exe
+    )
+    if success:
+        typer.echo(f"Successfully updated desktop binary to: {dest_exe}")
+    else:
+        typer.echo("Failed to update desktop binary.")
 
 
 if __name__ == "__main__":
